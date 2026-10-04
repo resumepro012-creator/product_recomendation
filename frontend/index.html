@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="referrer" content="no-referrer-when-downgrade" />
+  <title>Category - MyShop AI</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='75' font-size='75' font-weight='bold' fill='%237df9c1'>M</text></svg>" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="backdrop"></div>
+
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MyShop AI</div>
+        <div class="brand-subtitle">Choose a category, then open its items page</div>
+      </div>
+    </div>
+
+    <div class="page-actions page-actions--standalone">
+      <a class="primary-btn page-back-link" href="comparison.html" target="_blank" rel="noreferrer">Model Comparison</a>
+      <a class="ghost-btn page-back-link" href="runtime.html" target="_blank" rel="noreferrer">Runtime Logs</a>
+      <button id="resetForYouButton" class="ghost-btn">Reset For You</button>
+    </div>
+  </header>
+
+  <main class="page category-page">
+    <section class="panel highlight-panel for-you-section" hidden>
+      <div class="section-head">
+        <div>
+          <h2>For You</h2>
+          <p id="forYouMeta">This section appears after we learn from your browsing behavior.</p>
+        </div>
+        <span id="forYouCount" class="section-count">Locked</span>
+      </div>
+
+      <div id="forYouGrid" class="category-link-grid"></div>
+    </section>
+
+    <section class="category-hero hero-panel">
+      <div class="section-head category-hero-head">
+        <div>
+          <h1>Category</h1>
+          <p>Pick a category below to open a page with 10 to 15 items and click any item for a small detail view.</p>
+        </div>
+        <span class="section-count">6 pages</span>
+      </div>
+      <p class="category-note">Food, dresses, cosmetics, bakery, shoes, and crackers are already wired to open their own item pages.</p>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <h2>Open a category</h2>
+          <p>Each link opens category.html with the selected category and item detail cards.</p>
+        </div>
+      </div>
+
+      <div class="category-link-grid">
+        <a class="category-link-card" href="category.html?category=food">
+          <span class="category-link-label" style="color:var(--food)">Food</span>
+          <strong>Food</strong>
+          <p>Fresh bites, snacks, and grocery-style items.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+
+        <a class="category-link-card" href="category.html?category=dresses">
+          <span class="category-link-label" style="color:var(--pet)">Dresses</span>
+          <strong>Dresses</strong>
+          <p>Casual, elegant, and everyday dress picks.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+
+        <a class="category-link-card" href="category.html?category=cosmetics">
+          <span class="category-link-label" style="color:var(--snack)">Cosmetics</span>
+          <strong>Cosmetics</strong>
+          <p>Beauty and skincare items with quick details.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+
+        <a class="category-link-card" href="category.html?category=bakery">
+          <span class="category-link-label" style="color:var(--accent-2)">Bakery</span>
+          <strong>Bakery</strong>
+          <p>Warm bakery-style treats and baked goods.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+
+        <a class="category-link-card" href="category.html?category=shoes">
+          <span class="category-link-label" style="color:var(--drink)">Shoes</span>
+          <strong>Shoes</strong>
+          <p>Sneakers, flats, boots, and everyday footwear.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+
+        <a class="category-link-card" href="category.html?category=snack">
+          <span class="category-link-label" style="color:var(--accent)">Crackers</span>
+          <strong>Crackers</strong>
+          <p>Crunchy snack and cracker items with photos.</p>
+          <span class="category-link-action">Open page →</span>
+        </a>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const STATE_KEY = 'myshop-ai-discovery-state';
+    const CATEGORY_THRESHOLD = 5;
+    const categories = [
+      { key: 'food', label: 'Food', color: 'var(--food)', description: 'Best match from your food searches and visits.' },
+      { key: 'dresses', label: 'Dresses', color: 'var(--pet)', description: 'Fashion pages you opened recently.' },
+      { key: 'cosmetics', label: 'Cosmetics', color: 'var(--snack)', description: 'Beauty items based on your activity.' },
+      { key: 'bakery', label: 'Bakery', color: 'var(--accent-2)', description: 'Sweet baked items from your browsing.' },
+      { key: 'shoes', label: 'Shoes', color: 'var(--drink)', description: 'Footwear pages you visited.' },
+      { key: 'snack', label: 'Crackers', color: 'var(--accent)', description: 'Crunchy snack items you viewed.' }
+    ];
+
+    function loadState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(STATE_KEY));
+        if (parsed && typeof parsed === 'object') {
+          return {
+            searches: parsed.searches || {},
+            visits: parsed.visits || {},
+            recentCategories: Array.isArray(parsed.recentCategories) ? parsed.recentCategories : [],
+            recentQueries: Array.isArray(parsed.recentQueries) ? parsed.recentQueries : [],
+            lastViewedItems: Array.isArray(parsed.lastViewedItems) ? parsed.lastViewedItems : []
+          };
+        }
+      } catch (_) {
+        // ignore storage parse issues
+      }
+
+      return {
+        searches: {},
+        visits: {},
+        recentCategories: [],
+        recentQueries: [],
+        lastViewedItems: []
+      };
+    }
+
+    function scoreCategory(state, key) {
+      const searchScore = Number(state.searches[key] || 0) * 3;
+      const visitScore = Number(state.visits[key] || 0) * 2;
+      const recentCategoryBonus = state.recentCategories.indexOf(key) === -1 ? 0 : Math.max(0, 5 - state.recentCategories.indexOf(key));
+      const recentQueryBonus = state.recentQueries.some((entry) => entry.category === key) ? 2 : 0;
+      return searchScore + visitScore + recentCategoryBonus + recentQueryBonus;
+    }
+
+    function renderForYou() {
+      const state = loadState();
+      const section = document.querySelector('.for-you-section');
+      const grid = document.getElementById('forYouGrid');
+      const meta = document.getElementById('forYouMeta');
+      const count = document.getElementById('forYouCount');
+
+      const searchCount = Object.values(state.searches || {}).reduce((total, value) => total + Number(value || 0), 0);
+      const visitCount = Object.values(state.visits || {}).reduce((total, value) => total + Number(value || 0), 0);
+      const recentQueries = (state.recentQueries || []).length;
+      const lastViewedItems = (state.lastViewedItems || []).length;
+      const recentCategories = (state.recentCategories || []).length;
+      const totalSignals = searchCount + visitCount + recentQueries + lastViewedItems + recentCategories;
+
+      if (section) {
+        section.hidden = false;
+      }
+
+      if (totalSignals < CATEGORY_THRESHOLD) {
+        grid.innerHTML = '';
+        meta.textContent = 'Open a few categories or items first. This area will unlock after we learn your browsing behavior.';
+        count.textContent = 'Locked';
+        return;
+      }
+
+      const ranked = [...categories].sort((left, right) => scoreCategory(state, right.key) - scoreCategory(state, left.key));
+      const active = ranked.filter((item) => scoreCategory(state, item.key) > 0).slice(0, 4);
+      const hasActivity = active.length > 0;
+
+      meta.innerText = 'Personalized recommendations loading...';
+      count.textContent = hasActivity ? 'Personalized' : 'Learning';
+
+      grid.innerHTML = '';
+
+      active.forEach((category) => {
+        const searchCount = state.searches[category.key] || 0;
+        const visitCount = state.visits[category.key] || 0;
+        const card = document.createElement('a');
+        card.className = 'category-link-card';
+        card.href = `category.html?category=${encodeURIComponent(category.key)}`;
+        card.innerHTML = `
+          <span class="category-link-label" style="color:${category.color}">${category.label}</span>
+          <strong>${category.label}</strong>
+          <p>${category.description}</p>
+          <span class="category-link-action">${searchCount || visitCount ? `${searchCount} searches · ${visitCount} visits` : 'Open page →'}</span>
+        `;
+        grid.appendChild(card);
+      });
+    }
+
+  </script>
+
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      renderForYou();
+    });
+  </script>
+</body>
+</html>

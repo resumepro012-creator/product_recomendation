@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Model Comparison - MyShop AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="backdrop"></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MyShop AI</div>
+        <div class="brand-subtitle">Decision Tree vs KNN classifier metrics</div>
+      </div>
+    </div>
+
+    <div class="page-actions page-actions--standalone">
+      <a href="index.html" class="ghost-btn page-back-link">Back to home</a>
+      <a href="runtime.html" class="primary-btn page-back-link" target="_blank" rel="noreferrer">Runtime Logs</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="panel">
+      <div class="section-head runtime-head">
+        <div>
+          <h2>Model Comparison</h2>
+          <p id="status">Loading comparison...</p>
+        </div>
+      </div>
+
+      <div id="content" class="comparison-chart"></div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:5000';
+
+    async function load() {
+      const status = document.getElementById('status');
+      const content = document.getElementById('content');
+
+      try {
+        status.textContent = 'Fetching model metrics...';
+        const response = await fetch(`${API_BASE}/model-comparison`);
+        if (!response.ok) throw new Error(response.status);
+
+        const payload = await response.json();
+        const models = Array.isArray(payload.models) ? payload.models : [];
+
+        if (!models.length) {
+          status.textContent = 'No model data available.';
+          content.innerHTML = '<div class="empty-state">Comparison data is unavailable right now.</div>';
+          return;
+        }
+
+        status.textContent = `Loaded ${models.length} models from the backend.`;
+        content.innerHTML = '';
+
+        const metrics = [
+          { key: 'accuracy', label: 'Accuracy' },
+          { key: 'precision', label: 'Precision' },
+          { key: 'recall', label: 'Recall' },
+          { key: 'f1', label: 'F1 Score' }
+        ];
+
+        metrics.forEach((metric) => {
+          const section = document.createElement('section');
+          section.className = 'comparison-metric';
+          section.innerHTML = `<div class="comparison-metric-title">${metric.label}</div>`;
+
+          const bars = document.createElement('div');
+          bars.className = 'comparison-bars';
+
+          models.forEach((model) => {
+            const value = Math.max(0, Math.min(1, Number(model[metric.key]) || 0));
+            const item = document.createElement('div');
+            item.className = 'comparison-item';
+            item.innerHTML = `
+              <div class="comparison-item-head">
+                <span>${model.model}</span>
+                <strong>${(value * 100).toFixed(1)}%</strong>
+              </div>
+              <div class="comparison-track">
+                <div class="comparison-fill" style="width:${Math.round(value * 100)}%; background:linear-gradient(90deg,#7df9c1,#5cc9ff)"></div>
+              </div>
+            `;
+            bars.appendChild(item);
+          });
+
+          section.appendChild(bars);
+          content.appendChild(section);
+        });
+      } catch (error) {
+        status.textContent = 'Could not load comparison. Make sure the backend is running.';
+        content.innerHTML = '<div class="empty-state">Comparison data is unavailable right now.</div>';
+      }
+    }
+
+    load();
+  </script>
+</body>
+</html>

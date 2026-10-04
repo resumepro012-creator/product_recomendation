@@ -1,0 +1,236 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Runtime Logs - MyShop AI</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;700;800&family=Space+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="backdrop"></div>
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark">M</div>
+      <div>
+        <div class="brand-name">MyShop AI</div>
+        <div class="brand-subtitle">Searches, page visits, and item opens from this session</div>
+      </div>
+    </div>
+
+    <div class="page-actions page-actions--standalone">
+      <a href="index.html" class="ghost-btn page-back-link">Back to home</a>
+      <a href="comparison.html" class="primary-btn page-back-link" target="_blank" rel="noreferrer">Model Comparison</a>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="panel">
+      <div class="section-head runtime-head">
+        <div>
+          <h2>Activity Log</h2>
+          <p>Search submissions and category/item visits stored in SQLite.</p>
+        </div>
+        <div class="runtime-actions">
+          <button id="clearRuntimeButton" class="ghost-btn runtime-danger-btn">Clear Logs</button>
+          <select id="runtimeTypeFilter" class="runtime-select">
+            <option value="">All events</option>
+            <option value="search_commit">Search submissions</option>
+            <option value="category_view">Category visits</option>
+            <option value="item_view">Item opens</option>
+            <option value="recommend_request">Recommendation calls</option>
+          </select>
+          <input id="runtimeSearchInput" class="runtime-search" type="search" placeholder="Search history..." />
+          <button id="refreshRuntimeButton" class="ghost-btn">Reload</button>
+          <button id="openRawButton" class="primary-btn">Open Raw View</button>
+          <button id="exportCsvButton" class="ghost-btn">Export CSV</button>
+          <button id="downloadPdfButton" class="primary-btn">Download PDF</button>
+        </div>
+      </div>
+
+      <div id="runtimeMeta" class="runtime-meta">Loading...</div>
+      <div id="pdfContainer" class="runtime-table-wrap">
+        <table class="runtime-table" id="runtimeTable">
+          <thead>
+            <tr>
+              <th>Time</th>
+              <th>User</th>
+              <th>Event</th>
+              <th>Query</th>
+              <th>Category</th>
+              <th>Results</th>
+              <th>Details</th>
+            </tr>
+          </thead>
+          <tbody id="runtimeTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+
+  <script>
+    const API_BASE = 'http://127.0.0.1:5000';
+    let runtimeRows = [];
+
+    function csvEscape(value) {
+      const text = String(value ?? '');
+      return '"' + text.replaceAll('"', '""') + '"';
+    }
+
+    function escapeHtml(value) {
+      return String(value)
+        .replaceAll('&', '&amp;')
+        .replaceAll('<', '&lt;')
+        .replaceAll('>', '&gt;')
+        .replaceAll('"', '&quot;')
+        .replaceAll("'", '&#039;');
+    }
+
+    function downloadCsv(filename, rows) {
+      const columns = ['id', 'ts', 'user_id', 'event_type', 'query', 'category', 'details'];
+      const csv = [columns.join(',')].concat(rows.map((row) => columns.map((col) => csvEscape(row[col])).join(','))).join('\n');
+      const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = filename;
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+    }
+
+    async function clearRuntimeLogs() {
+      const confirmed = window.confirm('Clear all runtime logs? This will delete the stored activity history.');
+      if (!confirmed) return;
+
+      const response = await fetch(`${API_BASE}/runtime-data`, { method: 'DELETE' });
+      if (!response.ok) {
+        throw new Error(`HTTP ${response.status}`);
+      }
+
+      // Also clear frontend discovery state and guest session so home For You resets.
+      try {
+        localStorage.removeItem('myshop-ai-discovery-state');
+        localStorage.removeItem('myshop-ai-session-id');
+      } catch (_) {}
+
+      runtimeRows = [];
+      document.getElementById('runtimeMeta').textContent = 'Showing 0 events';
+      renderTable([]);
+      alert('Runtime DB cleared and local discovery state reset. Reload the home page to refresh For You.');
+    }
+
+    function renderTable(rows) {
+      const tbody = document.getElementById('runtimeTableBody');
+      tbody.innerHTML = '';
+
+      if (!rows || rows.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = '<td colspan="7" class="empty-row">No activity logs yet.</td>';
+        tbody.appendChild(tr);
+        return;
+      }
+
+      rows.forEach((row) => {
+        let resultCount = '';
+        try {
+          const details = typeof row.details === 'string' ? JSON.parse(row.details) : row.details;
+          resultCount = details && typeof details.result_count !== 'undefined' ? details.result_count : '';
+        } catch (_) {
+          resultCount = '';
+        }
+
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td>${row.ts || ''}</td><td>${row.user_id || ''}</td><td>${row.event_type || ''}</td><td>${row.query || ''}</td><td>${row.category || ''}</td><td>${resultCount}</td><td><code>${escapeHtml(row.details || '')}</code></td>`;
+        tbody.appendChild(tr);
+      });
+    }
+
+    async function loadRuntime() {
+      try {
+        const type = document.getElementById('runtimeTypeFilter').value || '';
+        const res = await fetch(`${API_BASE}/runtime-data?limit=500&event_type=${encodeURIComponent(type)}`);
+        if (!res.ok) throw new Error('fetch failed');
+        const payload = await res.json();
+        runtimeRows = Array.isArray(payload.events) ? payload.events : [];
+        applyFilters();
+      } catch (_) {
+        document.getElementById('runtimeMeta').textContent = 'Could not load activity log. Make sure backend is running.';
+        renderTable([]);
+      }
+    }
+
+    function applyFilters() {
+      const search = (document.getElementById('runtimeSearchInput').value || '').toLowerCase().trim();
+      const type = document.getElementById('runtimeTypeFilter').value || '';
+
+      let rows = runtimeRows.slice();
+
+      if (type) {
+        rows = rows.filter((row) => row.event_type === type);
+      }
+
+      if (search) {
+        rows = rows.filter((row) => (
+          `${row.ts || ''} ${row.user_id || ''} ${row.event_type || ''} ${row.query || ''} ${row.category || ''} ${row.details || ''}`
+        ).toLowerCase().includes(search));
+      }
+
+      document.getElementById('runtimeMeta').textContent = `Showing ${rows.length} of ${runtimeRows.length} activity events from ${API_BASE}/runtime-data`;
+      renderTable(rows);
+    }
+
+    document.addEventListener('DOMContentLoaded', () => {
+      document.getElementById('refreshRuntimeButton').addEventListener('click', loadRuntime);
+      document.getElementById('openRawButton').addEventListener('click', () => window.open(`${API_BASE}/runtime-data?limit=1000`, '_blank'));
+      document.getElementById('exportCsvButton').addEventListener('click', () => downloadCsv('runtime-events.csv', runtimeRows));
+      document.getElementById('clearRuntimeButton').addEventListener('click', async () => {
+        try {
+          await clearRuntimeLogs();
+        } catch (_) {
+          alert('Could not clear runtime logs.');
+        }
+      });
+      document.getElementById('runtimeSearchInput').addEventListener('input', applyFilters);
+      // when the type filter changes, re-query the server so we can show other event types
+      document.getElementById('runtimeTypeFilter').addEventListener('change', loadRuntime);
+
+      document.getElementById('downloadPdfButton').addEventListener('click', async () => {
+        if (!window.html2pdf) {
+          await new Promise((resolve) => {
+            const script = document.createElement('script');
+            script.src = 'https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.9.2/html2pdf.bundle.min.js';
+            script.onload = () => resolve();
+            script.onerror = () => resolve();
+            document.head.appendChild(script);
+          });
+        }
+
+        const element = document.getElementById('pdfContainer');
+        const options = {
+          margin: 10,
+          filename: 'runtime-logs.pdf',
+          image: { type: 'jpeg', quality: 0.98 },
+          html2canvas: { scale: 2 },
+          jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' }
+        };
+
+        try {
+          if (window.html2pdf) {
+            window.html2pdf().set(options).from(element).save();
+          } else {
+            alert('PDF library failed to load.');
+          }
+        } catch (_) {
+          alert('PDF generation failed.');
+        }
+      });
+
+      loadRuntime();
+    });
+  </script>
+</body>
+</html>
